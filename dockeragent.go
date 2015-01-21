@@ -4,17 +4,16 @@ import (
 	"fmt"
 	"labix.org/v2/mgo"
 	"log"
-	"github.com/spf13/viper"
+	"flag"
+	"labix.org/v2/mgo/bson"
 )
 
 var (
-	mongoDBHosts string
-	verbose = false
-)
-
-const (
-	Database       = "test"
-	InfoCollection = "people"
+	dockerHost      = *flag.String("docker", "localhost:2376", "Dockerhost to poll")
+	mongoDBHost     = *flag.String("mongo", "localhost:27017", "Host running mongodb to poll")
+	mongoCollection = *flag.String("collection", "dockeragent", "Collection in mongoDB")
+	mongoDB         = *flag.String("db", "dockeragent", "Collection in mongoDB")
+	verbose         = *flag.Bool("v", false, "Be verbose or not")
 )
 
 type Person struct {
@@ -23,45 +22,36 @@ type Person struct {
 }
 
 func main() {
-	setupDockeragent()
+	flag.Parse()
+
 	parseConfig()
-	/*
-		session, err := GetDBConnection("localhost")
+	session, err := GetDBConnection(mongoDBHost)
+	defer session.Close()
 
-		c := session.DB(Database).C(InfoCollection)
+	c := session.DB(mongoDBHost).C(mongoCollection)
 
-		c.Insert(&Person{"Ale", "+555381169639"}, &Person{"Cla", "+555384333233"})
+	c.Insert(&Person{"Ale", "+555381169639"}, &Person{"Cla", "+555384333233"})
 
-		result := Person{}
-		err = c.Find(bson.M{"name": "Ale"}).One(&result)
+	result := Person{}
+	err = c.Find(bson.M{"name": "Ale"}).One(&result)
 
-		if err == nil {
-			fmt.Println("Phone:", result.Phone)
-		}
-	*/
-}
-
-func setupDockeragent() {
-	viper.SetDefault("dockeragent.verbose", false)
-	viper.SetConfigType("yaml")
-	viper.SetConfigName("config.yml")
-	viper.AddConfigPath("/etc/dockeragent/")
-	viper.AddConfigPath("$HOME/.dockeragent")
-	viper.ReadInConfig()
-}
-
-func parseConfig() {
-	mongoDBHosts = viper.GetString("db.hostname")
-	dockeragent := viper.Get("dockeragent").(map[string]interface {})
-	verbose = bool(dockeragent["verbose"].(bool))
-
-	if verbose {
-		log.Println("MongoDB Hostname", mongoDBHosts)
+	if err == nil {
+		fmt.Println("Phone:", result.Phone)
 	}
 }
 
-func usage() {
-	fmt.Println("usage: dockeragent -h <DBHostname>")
+func setupDockeragent() {
+
+}
+
+func parseConfig() {
+	if verbose == true {
+		fmt.Println("DockerHost", dockerHost)
+		fmt.Println("MongoHost", mongoDBHost)
+		fmt.Println("MongoDB", mongoDB)
+		fmt.Println("MongoCollection", mongoCollection)
+		fmt.Println("Verbose", verbose)
+	}
 }
 
 func GetDBConnection(url string) (session *mgo.Session, err error) {
@@ -71,8 +61,6 @@ func GetDBConnection(url string) (session *mgo.Session, err error) {
 		log.Fatal(err)
 		panic(err)
 	}
-
-	defer session.Close()
 
 	session.SetMode(mgo.Monotonic, true)
 

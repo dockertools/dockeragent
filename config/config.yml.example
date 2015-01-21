@@ -1,0 +1,7 @@
+db:
+  hostname: localhost
+  port: 27017
+  user: user
+  password: password
+dockeragent:
+  verbose: true
