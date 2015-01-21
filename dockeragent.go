@@ -1,19 +1,33 @@
 package main
 
 import (
+	"flag"
+	"labix.org/v2/mgo/bson"
 	"fmt"
 	"labix.org/v2/mgo"
 	"log"
-	"flag"
-	"labix.org/v2/mgo/bson"
 )
 
-var (
-	dockerHost      = *flag.String("docker", "localhost:2376", "Dockerhost to poll")
-	mongoDBHost     = *flag.String("mongo", "localhost:27017", "Host running mongodb to poll")
-	mongoCollection = *flag.String("collection", "dockeragent", "Collection in mongoDB")
-	mongoDB         = *flag.String("db", "dockeragent", "Collection in mongoDB")
-	verbose         = *flag.Bool("v", false, "Be verbose or not")
+type Config struct {
+	DockerHost      string
+	MongoDBHost     string
+	MongoCollection string
+	MongoDB         string
+	Verbose         bool
+}
+
+var config = Config{*flag.String("docker", "localhost:2376", "Dockerhost to poll"),
+	*flag.String("mongo", "localhost:27017", "Host running mongodb to poll"),
+	*flag.String("collection", "dockeragent", "Collection in mongoDB"),
+	*flag.String("db", "dockeragent", "Collection in mongoDB"),
+	*flag.Bool("v", false, "Be verbose or not"),
+}
+
+
+const (
+	ImagesCollection = "images"
+	ContainersCollection = "containers"
+	HostsCollection = "hosts"
 )
 
 type Person struct {
@@ -21,14 +35,25 @@ type Person struct {
 	Phone string
 }
 
+type Image struct {
+	Created uint64 `json:"Created" bson:"Created,omitempty"`
+	Id string `json:"Id" bson:"_id,omitempty"`
+	ParentId string `json:"ParentId" bson:"ParentId"`
+	RepoTags map[int]string `json:"RepoTags" bson:"RepoTags"`
+	Size uint64 `json:"Size" bson:"Size"`
+	VirtualSize uint64 `json:"VirtualSize" bson:"VirtualSize"`
+}
+
 func main() {
 	flag.Parse()
 
 	parseConfig()
-	session, err := GetDBConnection(mongoDBHost)
+
+	session, err := GetDBConnection(config.MongoDBHost)
+
 	defer session.Close()
 
-	c := session.DB(mongoDBHost).C(mongoCollection)
+	c := session.DB(config.MongoDB).C(config.MongoCollection)
 
 	c.Insert(&Person{"Ale", "+555381169639"}, &Person{"Cla", "+555384333233"})
 
@@ -40,17 +65,14 @@ func main() {
 	}
 }
 
-func setupDockeragent() {
-
-}
-
 func parseConfig() {
-	if verbose == true {
-		fmt.Println("DockerHost", dockerHost)
-		fmt.Println("MongoHost", mongoDBHost)
-		fmt.Println("MongoDB", mongoDB)
-		fmt.Println("MongoCollection", mongoCollection)
-		fmt.Println("Verbose", verbose)
+	fmt.Println(config.Verbose)
+	if config.Verbose == true {
+		fmt.Println("DockerHost", config.DockerHost)
+		fmt.Println("MongoHost", config.MongoDBHost)
+		fmt.Println("MongoDB", config.MongoDB)
+		fmt.Println("MongoCollection", config.MongoCollection)
+		fmt.Println("Verbose", config.Verbose)
 	}
 }
 
