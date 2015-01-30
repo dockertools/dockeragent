@@ -2,32 +2,32 @@ package main
 
 import (
 	"flag"
-	"labix.org/v2/mgo/bson"
 	"fmt"
 	"labix.org/v2/mgo"
 	"log"
+	"github.com/jmcvetta/napping"
+	"time"
 )
 
 type Config struct {
-	DockerHost      string
-	MongoDBHost     string
-	MongoCollection string
-	MongoDB         string
-	Verbose         bool
+	DockerHost            string
+	MongoDBHost           string
+	MongoDB               string
+	Interval              int
+	Verbose               bool
 }
 
 var config = Config{*flag.String("docker", "localhost:2376", "Dockerhost to poll"),
 	*flag.String("mongo", "localhost:27017", "Host running mongodb to poll"),
-	*flag.String("collection", "dockeragent", "Collection in mongoDB"),
-	*flag.String("db", "dockeragent", "Collection in mongoDB"),
+	*flag.String("db", "dockeragent", "Name of mongoDB"),
+	*flag.Int("t", 30, "Poll interval in seconds"),
 	*flag.Bool("v", false, "Be verbose or not"),
 }
 
-
 const (
-	ImagesCollection = "images"
+	ImagesCollection     = "images"
 	ContainersCollection = "containers"
-	HostsCollection = "hosts"
+	HostsCollection      = "hosts"
 )
 
 type Person struct {
@@ -36,11 +36,11 @@ type Person struct {
 }
 
 type Image struct {
-	Created uint64 `json:"Created" bson:"Created,omitempty"`
-	Id string `json:"Id" bson:"_id,omitempty"`
-	ParentId string `json:"ParentId" bson:"ParentId"`
-	RepoTags map[int]string `json:"RepoTags" bson:"RepoTags"`
-	Size uint64 `json:"Size" bson:"Size"`
+	Created     uint64 `json:"Created" bson:"Created,omitempty"`
+	Id          string `json:"Id" bson:"_id,omitempty"`
+	ParentId    string `json:"ParentId" bson:"ParentId"`
+	RepoTags    []string `json:"RepoTags" bson:"RepoTags"`
+	Size        uint64 `json:"Size" bson:"Size"`
 	VirtualSize uint64 `json:"VirtualSize" bson:"VirtualSize"`
 }
 
@@ -49,21 +49,54 @@ func main() {
 
 	parseConfig()
 
+	s := napping.Session{}
+	url := "http://188.166.55.153:2376/images/json"
 	session, err := GetDBConnection(config.MongoDBHost)
+
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	defer session.Close()
 
-	c := session.DB(config.MongoDB).C(config.MongoCollection)
+	c := session.DB(config.MongoDB).C(ImagesCollection)
 
-	c.Insert(&Person{"Ale", "+555381169639"}, &Person{"Cla", "+555384333233"})
-
-	result := Person{}
-	err = c.Find(bson.M{"name": "Ale"}).One(&result)
-
-	if err == nil {
-		fmt.Println("Phone:", result.Phone)
+	for ; ; {
+		PollDockerDaemon(c, s, url)
+		time.Sleep(time.Duration(config.Interval * 1000 * 1000 * 1000))
 	}
 }
+
+func PollDockerDaemon(c *mgo.Collection, s napping.Session, url string) {
+	var images []Image
+	resp, err := s.Get(url, nil, &images, nil)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if resp.Status() == 200 {
+		if config.Verbose {
+			fmt.Println("Got Images from server")
+		}
+		writeImagesToDB(c, images)
+	}
+}
+
+func writeImagesToDB(c *mgo.Collection, images []Image) {
+	for index := range images {
+		err := c.Insert(images[index])
+
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		if err == nil && config.Verbose {
+			fmt.Println("Written image to database")
+		}
+	}
+}
+
 
 func parseConfig() {
 	fmt.Println(config.Verbose)
@@ -71,7 +104,6 @@ func parseConfig() {
 		fmt.Println("DockerHost", config.DockerHost)
 		fmt.Println("MongoHost", config.MongoDBHost)
 		fmt.Println("MongoDB", config.MongoDB)
-		fmt.Println("MongoCollection", config.MongoCollection)
 		fmt.Println("Verbose", config.Verbose)
 	}
 }
