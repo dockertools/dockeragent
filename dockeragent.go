@@ -17,10 +17,10 @@ type Config struct {
 	Verbose               bool
 }
 
-var config = Config{*flag.String("docker", "localhost:2376", "Dockerhost to poll"),
-	*flag.String("mongo", "localhost:27017", "Host running mongodb to poll"),
-	*flag.String("db", "dockeragent", "Name of mongoDB"),
-	*flag.Int("t", 30, "Poll interval in seconds"),
+var config = Config{*flag.String("docker", "192.168.59.103:2375", "Dockerhost to poll"),
+	*flag.String("mongo", "localhost:3001", "Host running mongodb to poll"),
+	*flag.String("db", "meteor", "Name of mongoDB"),
+	*flag.Int("t", 5, "Poll interval in seconds"),
 	*flag.Bool("v", false, "Be verbose or not"),
 }
 
@@ -44,13 +44,28 @@ type Image struct {
 	VirtualSize uint64 `json:"VirtualSize" bson:"VirtualSize"`
 }
 
+type Port struct {
+	IP                   string `json:"IP" bson:"IP,omitempty"`
+	PrivatePort          int `json:"PrivatePort" bson:"PrivatePort,omitempty"`
+	PublicPort           int `json:"PublicPort" bson:"PublicPort,omitempty"`
+	Type                 string `json:"Type" bson:"Type"`
+}
+
+type Container struct {
+	Command       string `json:"Command bson:"Command,omitempty"`
+	Created       uint64 `json:"Created" bson:"Created,omitempty"`
+	Id            string `json:"Id" bson:"_id,omitempty"`
+	Names         []string `json:"Names" bson:"Names"`
+	Ports         []Port `json:"Ports" bson:"Ports"`
+	Status        string `json:"Status" bson:"Status"`
+}
+
 func main() {
 	flag.Parse()
 
 	parseConfig()
 
 	s := napping.Session{}
-	url := "http://188.166.55.153:2376/images/json"
 	session, err := GetDBConnection(config.MongoDBHost)
 
 	if err != nil {
@@ -59,15 +74,48 @@ func main() {
 
 	defer session.Close()
 
-	c := session.DB(config.MongoDB).C(ImagesCollection)
-
 	for ; ; {
-		PollDockerDaemon(c, s, url)
+		imagesCollection := session.DB(config.MongoDB).C(ImagesCollection)
+		ImportImages(imagesCollection, s)
+		containersCollection := session.DB(config.MongoDB).C(ContainersCollection)
+		ImportContainers(containersCollection, s)
 		time.Sleep(time.Duration(config.Interval * 1000 * 1000 * 1000))
 	}
 }
 
-func PollDockerDaemon(c *mgo.Collection, s napping.Session, url string) {
+func ImportContainers(containersCollection *mgo.Collection, s napping.Session) {
+	url := "http://" + config.DockerHost + "/containers/json"
+	var containers []Container
+	resp, err := s.Get(url, nil, &containers, nil)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if resp.Status() == 200 {
+		if config.Verbose {
+			fmt.Println("Got containers from server")
+		}
+		writeContainersToDB(containersCollection, containers)
+	}
+}
+
+func writeContainersToDB(containersCollection *mgo.Collection, containers []Container) {
+	for index := range containers {
+		err := containersCollection.Insert(containers[index])
+
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		if err == nil && config.Verbose {
+			fmt.Println("Written new container to database")
+		}
+	}
+}
+
+func ImportImages(c *mgo.Collection, s napping.Session) {
+	url := "http://" + config.DockerHost + "/images/json"
 	var images []Image
 	resp, err := s.Get(url, nil, &images, nil)
 
