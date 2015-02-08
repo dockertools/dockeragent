@@ -7,6 +7,7 @@ import (
 	"log"
 	"github.com/jmcvetta/napping"
 	"time"
+	"github.com/dockertools/dockeragent/types"
 )
 
 type Config struct {
@@ -29,36 +30,6 @@ const (
 	ContainersCollection = "containers"
 	HostsCollection      = "hosts"
 )
-
-type Person struct {
-	Name  string
-	Phone string
-}
-
-type Image struct {
-	Created     uint64 `json:"Created" bson:"Created,omitempty"`
-	Id          string `json:"Id" bson:"_id,omitempty"`
-	ParentId    string `json:"ParentId" bson:"ParentId"`
-	RepoTags    []string `json:"RepoTags" bson:"RepoTags"`
-	Size        uint64 `json:"Size" bson:"Size"`
-	VirtualSize uint64 `json:"VirtualSize" bson:"VirtualSize"`
-}
-
-type Port struct {
-	IP                   string `json:"IP" bson:"IP,omitempty"`
-	PrivatePort          int `json:"PrivatePort" bson:"PrivatePort,omitempty"`
-	PublicPort           int `json:"PublicPort" bson:"PublicPort,omitempty"`
-	Type                 string `json:"Type" bson:"Type"`
-}
-
-type Container struct {
-	Command       string `json:"Command bson:"Command,omitempty"`
-	Created       uint64 `json:"Created" bson:"Created,omitempty"`
-	Id            string `json:"Id" bson:"_id,omitempty"`
-	Names         []string `json:"Names" bson:"Names"`
-	Ports         []Port `json:"Ports" bson:"Ports"`
-	Status        string `json:"Status" bson:"Status"`
-}
 
 func main() {
 	flag.Parse()
@@ -85,7 +56,7 @@ func main() {
 
 func ImportContainers(containersCollection *mgo.Collection, s napping.Session) {
 	url := "http://" + config.DockerHost + "/containers/json"
-	var containers []Container
+	var containers []types.Container
 	resp, err := s.Get(url, nil, &containers, nil)
 
 	if err != nil {
@@ -100,7 +71,7 @@ func ImportContainers(containersCollection *mgo.Collection, s napping.Session) {
 	}
 }
 
-func writeContainersToDB(containersCollection *mgo.Collection, containers []Container) {
+func writeContainersToDB(containersCollection *mgo.Collection, containers []types.Container) {
 	for index := range containers {
 		err := containersCollection.Insert(containers[index])
 
@@ -116,7 +87,7 @@ func writeContainersToDB(containersCollection *mgo.Collection, containers []Cont
 
 func ImportImages(c *mgo.Collection, s napping.Session) {
 	url := "http://" + config.DockerHost + "/images/json"
-	var images []Image
+	var images []types.Image
 	resp, err := s.Get(url, nil, &images, nil)
 
 	if err != nil {
@@ -131,7 +102,7 @@ func ImportImages(c *mgo.Collection, s napping.Session) {
 	}
 }
 
-func writeImagesToDB(c *mgo.Collection, images []Image) {
+func writeImagesToDB(c *mgo.Collection, images []types.Image) {
 	for index := range images {
 		err := c.Insert(images[index])
 
